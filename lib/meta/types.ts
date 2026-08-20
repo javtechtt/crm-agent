@@ -63,6 +63,7 @@ export interface NormalizedMetaMessage {
   isFromBusiness: boolean;
   attachments: MetaAttachment[];
   referral: MetaReferral | null;
+  rawPayload: MetaMessagingEvent;
 }
 
 export type NormalizedMetaEvent =

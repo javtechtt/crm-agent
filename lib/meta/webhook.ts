@@ -32,6 +32,7 @@ function normalizeMessage(
     isFromBusiness: Boolean(message.is_echo),
     attachments: Array.isArray(message.attachments) ? message.attachments : [],
     referral: event.referral ?? message.referral ?? null,
+    rawPayload: event,
   };
 }
 

@@ -1,8 +1,11 @@
-import { sql } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   check,
+  date,
   index,
+  integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -11,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type { MetaAttachment, MetaMessagingEvent } from "@/lib/meta/types";
+import type { AdsAnalysisSummary, ProductAngle } from "@/lib/ads/types";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -133,3 +137,126 @@ export const messages = pgTable(
     ),
   ],
 );
+
+export const uploadedReports = pgTable("uploaded_reports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  fileName: text("file_name").notNull(),
+  source: text("source").default("meta_ads_upload").notNull(),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  rowCount: integer("row_count").default(0).notNull(),
+  dateStart: date("date_start", { mode: "date" }),
+  dateEnd: date("date_end", { mode: "date" }),
+  notes: text("notes"),
+  ...timestamps,
+});
+
+export const adInsightRows = pgTable(
+  "ad_insight_rows",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    uploadedReportId: uuid("uploaded_report_id")
+      .notNull()
+      .references(() => uploadedReports.id, { onDelete: "cascade" }),
+    date: date("date", { mode: "date" }),
+    campaignName: text("campaign_name"),
+    adSetName: text("ad_set_name"),
+    adName: text("ad_name"),
+    productAngle: text("product_angle").$type<ProductAngle>().notNull(),
+    spend: numeric("spend", { precision: 14, scale: 2, mode: "number" })
+      .default(0)
+      .notNull(),
+    impressions: integer("impressions").default(0).notNull(),
+    reach: integer("reach").default(0).notNull(),
+    frequency: numeric("frequency", {
+      precision: 10,
+      scale: 4,
+      mode: "number",
+    })
+      .default(0)
+      .notNull(),
+    clicks: integer("clicks").default(0).notNull(),
+    ctr: numeric("ctr", { precision: 10, scale: 4, mode: "number" })
+      .default(0)
+      .notNull(),
+    cpc: numeric("cpc", { precision: 14, scale: 4, mode: "number" })
+      .default(0)
+      .notNull(),
+    cpm: numeric("cpm", { precision: 14, scale: 4, mode: "number" })
+      .default(0)
+      .notNull(),
+    results: numeric("results", {
+      precision: 14,
+      scale: 2,
+      mode: "number",
+    })
+      .default(0)
+      .notNull(),
+    costPerResult: numeric("cost_per_result", {
+      precision: 14,
+      scale: 4,
+      mode: "number",
+    })
+      .default(0)
+      .notNull(),
+    rawDataJson: jsonb("raw_data_json")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("ad_insight_rows_report_idx").on(table.uploadedReportId),
+    index("ad_insight_rows_date_idx").on(table.date),
+    index("ad_insight_rows_campaign_idx").on(table.campaignName),
+    index("ad_insight_rows_ad_idx").on(table.adName),
+    index("ad_insight_rows_product_angle_idx").on(table.productAngle),
+    check(
+      "ad_insight_rows_product_angle_check",
+      sql`${table.productAngle} in ('Hotdog', 'Pepperoni', 'Mince', 'Parmesan', 'Cashew Cheese', 'Other')`,
+    ),
+  ],
+);
+
+export const aiAnalyses = pgTable(
+  "ai_analyses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    uploadedReportId: uuid("uploaded_report_id").references(
+      () => uploadedReports.id,
+      { onDelete: "set null" },
+    ),
+    question: text("question").notNull(),
+    answer: text("answer").notNull(),
+    summaryJson: jsonb("summary_json").$type<AdsAnalysisSummary>().notNull(),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("ai_analyses_report_idx").on(table.uploadedReportId)],
+);
+
+export const uploadedReportsRelations = relations(
+  uploadedReports,
+  ({ many }) => ({
+    rows: many(adInsightRows),
+    analyses: many(aiAnalyses),
+  }),
+);
+
+export const adInsightRowsRelations = relations(adInsightRows, ({ one }) => ({
+  report: one(uploadedReports, {
+    fields: [adInsightRows.uploadedReportId],
+    references: [uploadedReports.id],
+  }),
+}));
+
+export const aiAnalysesRelations = relations(aiAnalyses, ({ one }) => ({
+  report: one(uploadedReports, {
+    fields: [aiAnalyses.uploadedReportId],
+    references: [uploadedReports.id],
+  }),
+}));
